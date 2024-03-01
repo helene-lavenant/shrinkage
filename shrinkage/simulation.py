@@ -14,10 +14,10 @@ class PopulationCovariance:
     def __init__(
         self,
         N,
-        C_model='unit',
-        rotate_C=False,
-        **kwargs
-        ):
+        C_model = 'unit',
+        rotate_C = False,
+        **kwargs,
+    ):
         self.N = N
         self.C_model = C_model
         self.rotate_C = rotate_C
@@ -33,10 +33,10 @@ class PopulationCovariance:
         """
         Generate C.
         """
-        if self.C_model=='unit':
-            self.C = np.ones(self.N)
+        if self.C_model == 'unit':
+            self.C = np.eye(self.N)
         
-        elif self.C_model=='clusters':
+        elif self.C_model == 'clusters':
             self.f_list = self.kwargs.get('f_list')
             self.e_list = self.kwargs.get('e_list')
 
@@ -46,38 +46,46 @@ class PopulationCovariance:
             f_list_full += [self.N - sum(f_list_full)]
             
             C_list = [s * [e] for s, e in zip(f_list_full, self.e_list)]
-            self.C = np.diag(np.array([c for sublist in C_list for c in sublist]))
+            self.C = np.diag([c for sublist in C_list for c in sublist])
         
-        elif self.C_model=='inverse-Wishart':
+        elif self.C_model == 'inverse-Wishart':
             self.kappa = self.kwargs.get('kappa')
             
             q_IW = 1. / (1. + 2 * self.kappa)
             T_IW = int(self.N / q_IW)
 
             rng = np.random.default_rng()
-            R = rng.standard_normal(size=(self.N , T_IW))
+            R = rng.standard_normal(
+                size = (self.N , T_IW),
+            )
             W = R @ R.T / T_IW
             self.C = (1. - q_IW) * inv(W)
         
-        elif self.C_model=='Kumaraswamy':
+        elif self.C_model == 'Kumaraswamy':
             self.condition_number = self.kwargs.get('condition_number')
             self.a = self.kwargs.get('a')
             self.b = self.kwargs.get('b')
             
             rng = np.random.default_rng()
-            kum = (1. - (1. - rng.uniform(size=self.N)) ** (1 / self.b)) ** (1 / self.a)
+            k = rng.uniform(
+                size = self.N,
+            )
+            kum = (1. - (1. - k) ** (1 / self.b)) ** (1 / self.a)
             C_eigvals = 1. + (self.condition_number - 1.) * kum
             C_eigvals.sort()
             
             self.C = np.diag(C_eigvals)
         
+        elif self.C_model == 'explicit':
+            self.C = self.kwargs.get('C')
+
         else:
             raise Exception('Unknown method to generate C.')
         
         # optionally, rotate such a generated C by an orthogonal similarity transformation
 
         if self.rotate_C:
-            O = ortho_group.rvs(dim=self.N)
+            O = ortho_group.rvs(dim = self.N)
             self.C = O @ self.C @ O.T
 
 
@@ -89,10 +97,10 @@ class AutoCovariance:
     def __init__(
         self,
         T_total,
-        A_model='unit',
-        rotate_A=False,
-        **kwargs
-        ):
+        A_model = 'unit',
+        rotate_A = False,
+        **kwargs,
+    ):
         self.T_total = T_total
         self.A_model = A_model
         self.rotate_A = rotate_A
@@ -108,33 +116,39 @@ class AutoCovariance:
         """
         Generate A.
         """
-        if self.A_model=='unit':
+        if self.A_model == 'unit':
             self.A = np.eye(self.T_total)
         
-        elif self.A_model=='VARMA':
+        elif self.A_model == 'VARMA':
             varma = Varma(
-                T=self.T_total,
-                **self.kwargs
-                )
+                T = self.T_total,
+                **self.kwargs,
+            )
             self.a_list = varma.a_list
             self.b_list = varma.b_list
             self.r1 = varma.r1
             self.r2 = varma.r2
             self.A = varma.A
 
-        elif self.A_model=='exp-decay':
+        elif self.A_model == 'exp-decay':
             self.tau = self.kwargs.get('tau')
             self.A = toeplitz(np.exp(- np.arange(self.T_total) / self.tau))
         
-        elif self.A_model=='EWMA':
+        elif self.A_model == 'EWMA':
             self.delta = self.kwargs.get('delta')
             eps = 1. - self.delta / self.T_total
             self.A = np.diag(
                 self.T_total * (1 - eps) / (1 - eps ** self.T_total) * eps ** np.arange(self.T_total)
-                )
+            )
+        
+        elif self.A_model == 'explicit':
+            self.A = self.kwargs.get('A')
+        
+        else:
+            raise Exception('Unknown method to generate A.')
         
         if self.rotate_A:
-            O = ortho_group.rvs(dim=self.T_total)
+            O = ortho_group.rvs(dim = self.T_total)
             self.A = O @ self.A @ O.T
 
 
@@ -149,20 +163,20 @@ class DataMatrix:
     def __init__(
         self,
         method,
-        **kwargs
-        ):
+        **kwargs,
+    ):
         self.method = method
         self.kwargs = kwargs
 
-        if self.method=='sandwich':
+        if self.method == 'sandwich':
             self.prepare_sandwich()
             self.simulate_Y_sandwich()
         
-        elif self.method=='recurrence' and self.kwargs.get('A_model')=='VARMA':
+        elif self.method == 'recurrence' and self.kwargs.get('A_model') == 'VARMA':
             self.prepare_sandwich()
             self.simulate_Y_recurrence()
 
-        elif self.method=='load':
+        elif self.method == 'load':
             self.Y = self.kwargs.get('Y')
             self.N, self.T_total = self.Y.shape
         
@@ -194,44 +208,61 @@ class DataMatrix:
         self.dist = self.kwargs.get('dist', 'Gaussian')
 
         rng = np.random.default_rng()
-        if self.dist=='Gaussian':
-            X = rng.standard_normal(size=(self.N, self.T_total))
-        elif self.dist=='Student-t':
+        if self.dist == 'Gaussian':
+            X = rng.standard_normal(
+                size = (self.N, self.T_total),
+            )
+        elif self.dist == 'Student-t':
             df = self.kwargs.get('df')
-            X = rng.standard_t(df=df, size=(self.N, self.T_total))
+            X = rng.standard_t(
+                df = df,
+                size = (self.N, self.T_total),
+            )
         else:
             raise Exception('Unknown distribution.')
         
         self.Y = self.population_covariance.sqrt_C @ X @ self.auto_covariance.sqrt_A
     
 
-    def simulate_Y_recurrence(self):
+    def simulate_Y_recurrence(
+        self,
+        warm_start = 1000,
+    ):
         """
         Simulate synthetic data Y of shape N x T_total
         by a given recurrence relation.
         """
-        if self.A_model=='VARMA':
-            warm_start = 1000
+        if self.A_model == 'VARMA':
             T_full = self.T_total + warm_start * (self.auto_covariance.r1 + self.auto_covariance.r2)
 
-            Y = np.zeros(shape=(self.N, T_full))
+            Y = np.zeros(shape = (self.N, T_full))
 
             rng = np.random.default_rng()
-            if self.dist=='Gaussian':
-                eps = self.sqrt_C @ rng.standard_normal(size=(self.N, T_full))
+            if self.dist == 'Gaussian':
+                eps = self.sqrt_C @ rng.standard_normal(
+                    size = (self.N, T_full),
+                )
             elif self.dist=='Student-t':
                 df = self.kwargs.get('df')
-                eps = self.sqrt_C @ rng.standard_t(df=df, size=(self.N, T_full))
+                eps = self.sqrt_C @ rng.standard_t(
+                    df = df,
+                    size = (self.N, T_full),
+                )
             else:
                 raise Exception('Unknown distribution.')
 
             for t in range(self.r2, T_full):
-                Y[:, t] = (self.auto_covariance.a_list[::-1] * eps[:, (t - self.auto_covariance.r2):(t + 1)]).sum(axis=1)
+                Y[:, t] = (
+                    self.auto_covariance.a_list[::-1] * eps[:, (t - self.auto_covariance.r2):(t + 1)]
+                ).sum(axis = 1)
             
             for t in range(self.r1, T_full - self.r2):
-                Y[:, t] += (self.auto_covariance.b_list[::-1] * Y[:, (t - self.auto_covariance.r1):t]).sum(axis=1)
+                Y[:, t] += (
+                    self.auto_covariance.b_list[::-1] * Y[:, (t - self.auto_covariance.r1):t]
+                ).sum(axis = 1)
             
             self.Y = Y[:, -self.T_total:]
         
         else:
             raise Exception('Unknown model to simulate Y by a recurrence relation.')
+
