@@ -24,17 +24,17 @@ class SampleEigenvalues:
     def __init__(
         self,
         Y,
-        T,
-        T_out=None,
-        n_top=None,
-        name='sample'
-        ):
+        T = None,
+        T_out = None,
+        n_top = None,
+        name = 'sample',
+    ):
 
         self.name = name
         
         self.Y = Y
         self.N, self.T_total = self.Y.shape
-        self.T = T
+        self.T = T if T is not None else self.T_total
         self.q = self.N / self.T
         self.T_out = T_out
         self.n_top = n_top
@@ -75,8 +75,8 @@ class SampleEigenvalues:
     def calculate_E(
         self,
         temporal_slice,
-        eigensystem=True
-        ):
+        eigensystem = True,
+    ):
         """
         Calculate the sample estimator E of a part of the data matrix Y
         given by a set of temporal indices specified by the "temporal_slice".
@@ -104,7 +104,7 @@ class SampleEigenvalues:
         for the temporal slice corresponding to the last T observations.
         """
         self.E, self.E_eigval, self.E_eigvec = self.calculate_E(
-            temporal_slice = slice(-self.T,  None)
+            temporal_slice = slice(-self.T,  None),
         )
 
         if self.n_top is not None:
@@ -119,20 +119,22 @@ class SampleEigenvalues:
         assert self.T_out is not None
 
         self.K = int((self.T_total - self.T) / self.T_out)
+        if self.K <= 0:
+            raise Exception(f'K needs to be a positive integer, but is K = {self.K}.')
 
-        self.xi_oracle_mwcv_all = np.zeros((self.K, self.N))
+        self.xi_oracle_mwcv_all = np.zeros(shape = (self.K, self.N))
 
         for mu in range(self.K):
 
             t_mu = self.T + mu * self.T_out
             
             _, _, E_train_eigvec_mu = self.calculate_E(
-                temporal_slice = slice(t_mu - self.T, t_mu)
+                temporal_slice = slice(t_mu - self.T, t_mu),
             )
             
             E_test_mu = self.calculate_E(
                 temporal_slice = slice(t_mu, t_mu + self.T_out),
-                eigensystem = False
+                eigensystem = False,
             )
             
             self.xi_oracle_mwcv_all[mu] = [
@@ -140,8 +142,8 @@ class SampleEigenvalues:
                 for i in range(self.N)
             ]
 
-        self.xi_oracle_mwcv = self.xi_oracle_mwcv_all.mean(axis=0)
-        self.xi_oracle_mwcv_std = self.xi_oracle_mwcv_all.std(axis=0)
+        self.xi_oracle_mwcv = self.xi_oracle_mwcv_all.mean(axis = 0)
+        self.xi_oracle_mwcv_std = self.xi_oracle_mwcv_all.std(axis = 0)
 
         if self.n_top is not None:
             self.xi_oracle_mwcv = self.xi_oracle_mwcv[:-self.n_top]
@@ -169,19 +171,19 @@ class SampleEigenvalues:
             self.bandwidth = self.bandwidth[:-self.n_top]
 
         self.E_eigval_kernel_density, self.E_eigval_kernel_Hilbert = __class__.epanechnikov_estimates(
-            x=self.E_eigval,
-            bandwidth=self.bandwidth
-            )
+            x = self.E_eigval,
+            bandwidth = self.bandwidth,
+        )
         
         if self.T_out is not None:
             self.xi_oracle_mwcv_kernel_density, self.xi_oracle_mwcv_kernel_Hilbert = __class__.epanechnikov_estimates(
-                x=np.sort(self.xi_oracle_mwcv),
-                bandwidth=self.bandwidth
-                )
+                x = np.sort(self.xi_oracle_mwcv),
+                bandwidth = self.bandwidth,
+            )
             self.xi_oracle_mwcv_iso_kernel_density, self.xi_oracle_mwcv_iso_kernel_Hilbert = __class__.epanechnikov_estimates(
-                x=self.xi_oracle_mwcv_iso,
-                bandwidth=self.bandwidth
-                )
+                x = self.xi_oracle_mwcv_iso,
+                bandwidth = self.bandwidth,
+            )
 
 
     @staticmethod
@@ -216,22 +218,19 @@ class SampleEigenvalues:
         l2 = np.array([(x_ - x) / l1 for x_ in x])
         l3, l4 = __class__.epanechnikov(l2)
         
-        kernel_density = (l3 / l1).mean(axis=1)
-        kernel_Hilbert = (l4 / l1).mean(axis=1)
+        kernel_density = (l3 / l1).mean(axis = 1)
+        kernel_Hilbert = (l4 / l1).mean(axis = 1)
 
         return kernel_density, kernel_Hilbert
     
 
-    def rie(
-        self,
-        x
-        ):
+    def rie(self, x):
         """
         For a given array x of length N,
         calculate the RIE estimator with eigenvalues x
         (its eigenvectors are, by definition, the sample eigenvectors).
         """
-        if np.array(x).shape != (self.N,):
+        if np.array(x).shape != (len(self.E_eigvec),):
             raise Exception('x must be a 1-dim array of the same length as the number of eigenvalues.')
         
         return self.E_eigvec @ np.diag(x) @ self.E_eigvec.T
@@ -256,22 +255,22 @@ class SampleEigenvalues:
 
     def hist(
         self,
-        show_lambdas=False,
-        show_lambdas_density=False,
-        show_lambdas_Hilbert=False,
-        show_oracle_mwcv=False,
-        show_oracle_mwcv_density=False,
-        show_oracle_mwcv_Hilbert=False,
-        show_oracle_mwcv_iso=False,
-        show_oracle_mwcv_iso_density=False,
-        show_oracle_mwcv_iso_Hilbert=False,
-        bins=None,
-        xlim=None,
-        ylim=None,
-        legend=True,
-        savefig=None,
-        set_options=True
-        ):
+        show_lambdas = False,
+        show_lambdas_density = False,
+        show_lambdas_Hilbert = False,
+        show_oracle_mwcv = False,
+        show_oracle_mwcv_density = False,
+        show_oracle_mwcv_Hilbert = False,
+        show_oracle_mwcv_iso = False,
+        show_oracle_mwcv_iso_density = False,
+        show_oracle_mwcv_iso_Hilbert = False,
+        bins = None,
+        xlim = None,
+        ylim = None,
+        legend = True,
+        savefig = None,
+        set_options = True,
+    ):
         """
         Plot either of the three histograms of:
           - the sample eigenvalues,
@@ -286,38 +285,38 @@ class SampleEigenvalues:
         if show_lambdas:
             plt.hist(
                 self.E_eigval,
-                bins=self.bns,
-                alpha=0.5,
-                color=self.plot_colors.get('sample_bars', 'black'),
-                density=True,
-                label='sample eigval'
+                bins = self.bns,
+                alpha = 0.5,
+                color = self.plot_colors.get('sample_bars', 'black'),
+                density = True,
+                label = 'sample eigval',
             )
 
         if show_lambdas_density:
             plt.plot(
                 self.E_eigval,
                 self.E_eigval_kernel_density,
-                color=self.plot_colors.get('sample_line', 'black'),
-                label='sample eigval density'
+                color = self.plot_colors.get('sample_line', 'black'),
+                label = 'sample eigval density',
             )
         
         if show_lambdas_Hilbert:
             plt.plot(
                 self.E_eigval,
                 self.E_eigval_kernel_Hilbert,
-                color=self.plot_colors.get('sample_hilbert', 'black'),
-                label='sample eigval Hilbert'
+                color = self.plot_colors.get('sample_hilbert', 'black'),
+                label = 'sample eigval Hilbert',
             )
 
         if show_oracle_mwcv:
             assert self.T_out is not None
             plt.hist(
                 self.xi_oracle_mwcv,
-                bins=self.bns,
-                alpha=0.5,
-                color=self.plot_colors.get('oracle_mwcv_bars', 'black'),
-                density=True,
-                label='oracle eigval'
+                bins = self.bns,
+                alpha = 0.5,
+                color = self.plot_colors.get('oracle_mwcv_bars', 'black'),
+                density = True,
+                label = 'oracle eigval',
             )
 
         if show_oracle_mwcv_density:
@@ -325,8 +324,8 @@ class SampleEigenvalues:
             plt.plot(
                 self.xi_oracle_mwcv,
                 self.xi_oracle_mwcv_kernel_density,
-                color=self.plot_colors.get('oracle_mwcv_line', 'black'),
-                label='oracle eigval density'
+                color = self.plot_colors.get('oracle_mwcv_line', 'black'),
+                label = 'oracle eigval density',
             )
         
         if show_oracle_mwcv_Hilbert:
@@ -334,19 +333,19 @@ class SampleEigenvalues:
             plt.plot(
                 self.xi_oracle_mwcv,
                 self.xi_oracle_mwcv_kernel_Hilbert,
-                color=self.plot_colors.get('oracle_mwcv_hilbert', 'black'),
-                label='oracle eigval Hilbert'
+                color = self.plot_colors.get('oracle_mwcv_hilbert', 'black'),
+                label = 'oracle eigval Hilbert',
             )
 
         if show_oracle_mwcv_iso:
             assert self.T_out is not None
             plt.hist(
                 self.xi_oracle_mwcv_iso,
-                bins=self.bns,
-                alpha=0.5,
-                color=self.plot_colors.get('oracle_mwcv_iso_bars', 'black'),
-                density=True,
-                label='isotonic oracle eigval'
+                bins = self.bns,
+                alpha = 0.5,
+                color = self.plot_colors.get('oracle_mwcv_iso_bars', 'black'),
+                density = True,
+                label = 'isotonic oracle eigval',
             )
 
         if show_oracle_mwcv_iso_density:
@@ -354,8 +353,8 @@ class SampleEigenvalues:
             plt.plot(
                 self.xi_oracle_mwcv_iso,
                 self.xi_oracle_mwcv_iso_kernel_density,
-                color=self.plot_colors.get('oracle_mwcv_iso_line', 'black'),
-                label='isotonic oracle eigval density'
+                color = self.plot_colors.get('oracle_mwcv_iso_line', 'black'),
+                label = 'isotonic oracle eigval density',
             )
         
         if show_oracle_mwcv_iso_Hilbert:
@@ -363,8 +362,8 @@ class SampleEigenvalues:
             plt.plot(
                 self.xi_oracle_mwcv_iso,
                 self.xi_oracle_mwcv_iso_kernel_Hilbert,
-                color=self.plot_colors.get('oracle_mwcv_iso_hilbert', 'black'),
-                label='isotonic oracle eigval Hilbert'
+                color = self.plot_colors.get('oracle_mwcv_iso_hilbert', 'black'),
+                label = 'isotonic oracle eigval Hilbert',
             )
 
         if set_options:
@@ -401,21 +400,23 @@ class SampleEigenvalues:
                 plt.legend()
             
             if savefig:
-                plt.savefig(fname=savefig)
+                plt.savefig(
+                    fname = savefig,
+                )
 
 
     def plot(
         self,
-        show_oracle_mwcv=False,
-        show_oracle_mwcv_errors=False,
-        show_oracle_mwcv_errors_every=1,
-        show_oracle_mwcv_iso=False,
-        xlim=None,
-        ylim=None,
-        legend=True,
-        savefig=None,
-        set_options=True
-        ):
+        show_oracle_mwcv = False,
+        show_oracle_mwcv_errors = False,
+        show_oracle_mwcv_errors_every = 1,
+        show_oracle_mwcv_iso = False,
+        xlim = None,
+        ylim = None,
+        legend = True,
+        savefig = None,
+        set_options = True,
+    ):
         """
         Plot some of the following:
           - the (cross-validation-estimated) oracle eigenvalues
@@ -430,30 +431,30 @@ class SampleEigenvalues:
                 plt.errorbar(
                     self.E_eigval,
                     self.xi_oracle_mwcv,
-                    yerr=self.xi_oracle_mwcv_std,
-                    ecolor='gray',
-                    errorevery=show_oracle_mwcv_errors_every,
-                    color=self.plot_colors.get('oracle_mwcv_bars', 'black'),
-                    fmt='^',
-                    alpha=0.3,
-                    label='oracle eigval'
+                    yerr = self.xi_oracle_mwcv_std,
+                    ecolor = 'gray',
+                    errorevery = show_oracle_mwcv_errors_every,
+                    color = self.plot_colors.get('oracle_mwcv_bars', 'black'),
+                    fmt = '^',
+                    alpha = 0.3,
+                    label = 'oracle eigval',
                 )
             else:
                 plt.scatter(
                     self.E_eigval,
                     self.xi_oracle_mwcv,
-                    color=self.plot_colors.get('oracle_mwcv_bars', 'black'),
-                    marker='^',
-                    alpha=0.3,
-                    label='oracle eigval'
+                    color = self.plot_colors.get('oracle_mwcv_bars', 'black'),
+                    marker = '^',
+                    alpha = 0.3,
+                    label = 'oracle eigval',
                 )
 
         if show_oracle_mwcv_iso:
             plt.plot(
                 self.E_eigval,
                 self.xi_oracle_mwcv_iso,
-                color=self.plot_colors.get('oracle_mwcv_iso_line', 'black'),
-                label='isotonic oracle eigval'
+                color = self.plot_colors.get('oracle_mwcv_iso_line', 'black'),
+                label = 'isotonic oracle eigval',
             )
 
         if set_options:
@@ -464,4 +465,7 @@ class SampleEigenvalues:
             if legend:
                 plt.legend()
             if savefig:
-                plt.savefig(fname=savefig)
+                plt.savefig(
+                    fname = savefig,
+                )
+

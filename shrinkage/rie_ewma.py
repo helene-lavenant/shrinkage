@@ -13,9 +13,12 @@ class EwmaShrinkage(LedoitPecheShrinkage):
     def __init__(
         self,
         delta,
-        **kwargs
-        ):
-        super().__init__(name='EWMA', **kwargs)
+        **kwargs,
+    ):
+        super().__init__(
+            name = 'EWMA',
+            **kwargs,
+        )
 
         self.delta = delta
 
@@ -28,7 +31,7 @@ class EwmaShrinkage(LedoitPecheShrinkage):
                 'xi_bars': 'xkcd:ochre',
                 'xi_line': 'xkcd:crimson',
                 'xi_hilbert': 'xkcd:rust',
-            }
+            },
         )
 
 
@@ -53,6 +56,8 @@ class EwmaShrinkage(LedoitPecheShrinkage):
         of the shrunk eigenvalues xi.
         """
         self.xi_kernel_density, self.xi_kernel_Hilbert = __class__.epanechnikov_estimates(
-            x=self.xi,
-            bandwidth=self.bandwidth
+            x = self.xi,
+            bandwidth = self.bandwidth,
         )
+    
+    

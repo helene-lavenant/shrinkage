@@ -50,11 +50,14 @@ class PopulationCovariance:
         
         elif self.C_model == 'inverse-Wishart':
             self.kappa = self.kwargs.get('kappa')
+            self.seed = self.kwargs.get('seed')
             
             q_IW = 1. / (1. + 2 * self.kappa)
             T_IW = int(self.N / q_IW)
 
-            rng = np.random.default_rng()
+            rng = np.random.default_rng(
+                seed = self.seed,
+            )
             R = rng.standard_normal(
                 size = (self.N , T_IW),
             )
@@ -65,8 +68,11 @@ class PopulationCovariance:
             self.condition_number = self.kwargs.get('condition_number')
             self.a = self.kwargs.get('a')
             self.b = self.kwargs.get('b')
+            self.seed = self.kwargs.get('seed')
             
-            rng = np.random.default_rng()
+            rng = np.random.default_rng(
+                seed = self.seed,
+            )
             k = rng.uniform(
                 size = self.N,
             )
@@ -132,7 +138,9 @@ class AutoCovariance:
 
         elif self.A_model == 'exp-decay':
             self.tau = self.kwargs.get('tau')
-            self.A = toeplitz(np.exp(- np.arange(self.T_total) / self.tau))
+            self.A = toeplitz(
+                np.exp(- np.arange(self.T_total) / self.tau)
+            )
         
         elif self.A_model == 'EWMA':
             self.delta = self.kwargs.get('delta')
@@ -182,6 +190,8 @@ class DataMatrix:
         
         else:
             raise Exception('Unknown method to create the data matrix Y.')
+
+        assert self.Y.shape == (self.N, self.T_total)
     
 
     def prepare_sandwich(self):
@@ -206,8 +216,11 @@ class DataMatrix:
         then "sandwich"-ing it with square roots of C and A.
         """
         self.dist = self.kwargs.get('dist', 'Gaussian')
+        self.seed = self.kwargs.get('seed')
 
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(
+            seed = self.seed,
+        )
         if self.dist == 'Gaussian':
             X = rng.standard_normal(
                 size = (self.N, self.T_total),
@@ -224,27 +237,29 @@ class DataMatrix:
         self.Y = self.population_covariance.sqrt_C @ X @ self.auto_covariance.sqrt_A
     
 
-    def simulate_Y_recurrence(
-        self,
-        warm_start = 1000,
-    ):
+    def simulate_Y_recurrence(self):
         """
         Simulate synthetic data Y of shape N x T_total
         by a given recurrence relation.
         """
         if self.A_model == 'VARMA':
-            T_full = self.T_total + warm_start * (self.auto_covariance.r1 + self.auto_covariance.r2)
+            self.seed = self.kwargs.get('seed')
+            self.warm_start = self.kwargs.get('warm_start', 1000)
+
+            T_full = self.T_total + self.warm_start * (self.auto_covariance.r1 + self.auto_covariance.r2)
 
             Y = np.zeros(shape = (self.N, T_full))
 
-            rng = np.random.default_rng()
+            rng = np.random.default_rng(
+                seed = self.seed,
+            )
             if self.dist == 'Gaussian':
-                eps = self.sqrt_C @ rng.standard_normal(
+                eps = self.population_covariance.sqrt_C @ rng.standard_normal(
                     size = (self.N, T_full),
                 )
-            elif self.dist=='Student-t':
+            elif self.dist == 'Student-t':
                 df = self.kwargs.get('df')
-                eps = self.sqrt_C @ rng.standard_t(
+                eps = self.population_covariance.sqrt_C @ rng.standard_t(
                     df = df,
                     size = (self.N, T_full),
                 )

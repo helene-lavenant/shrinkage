@@ -3,7 +3,9 @@ from scipy.linalg import toeplitz, eigh, inv
 from pathlib import Path
 from sympy import *
 
-CHI_EQUATIONS_DIR = 'chi_equations'
+from importlib_resources import files
+
+from . import chi_equations
 
 
 class Varma:
@@ -13,13 +15,19 @@ class Varma:
     as well as polynomial equations for chi = chi_A(u),
     when they are provided in appropriate text files.
     """
-    def __init__(self, T, get_chi_equations=False, **kwargs):
+    def __init__(
+        self,
+        T,
+        get_chi_equations = False,
+        **kwargs,
+    ):
         self.T = T
         self.get_chi_equations = get_chi_equations
         self.kwargs = kwargs
 
         self._get_varma_parameters()
         self._calculate_A()
+        
         if self.get_chi_equations:
             self._get_chi_equation()
 
@@ -45,15 +53,12 @@ class Varma:
 
         assert self.r2 >= 0
 
-        if self.r1==0:
+        if self.r1 == 0:
             self.name = f'VMA({self.r2})'
-            self.chi_equations_path = Path('shrinkage') / CHI_EQUATIONS_DIR / f'vma_{self.r2}'
-        elif self.r2==0:
+        elif self.r2 == 0:
             self.name = f'VAR({self.r1})'
-            self.chi_equations_path = Path('shrinkage') / CHI_EQUATIONS_DIR / f'var_{self.r1}'
         else:
             self.name = f'VARMA({self.r1}, {self.r2})'
-            self.chi_equations_path = Path('shrinkage') / CHI_EQUATIONS_DIR / f'varma_{self.r1}_{self.r2}'
         
         self.ab = [f'a{i}' for i in range(self.r2 + 1)] + [f'b{i}' for i in range(1, self.r1 + 1)]
     
@@ -65,19 +70,43 @@ class Varma:
         as well as its eigenvalues.
         """
         A_VMA = __class__._calculate_A_vma(
-            a_list=self.a_list,
-            T=self.T
+            a_list = self.a_list,
+            T = self.T,
         )
         A_VMA_2 = __class__._calculate_A_vma(
-            a_list=[1.] + [-b for b in self.b_list],
-            T=self.T
+            a_list = [1.] + [-b for b in self.b_list],
+            T = self.T,
         )
         self.A = A_VMA @ inv(A_VMA_2)
 
         self.A_eigval, _ = eigh(self.A)
 
     
-    def calculate_M_transform_A(self, z_re, z_im, method='eig'):
+    @staticmethod
+    def _calculate_A_vma(a_list, T):
+        """
+        Calculate the autocorrelation matrix A
+        of a VMA(r2) model.
+        """
+        r2 = len(a_list) - 1
+        kappa_list = [
+            sum(
+                a_list[j] * a_list[j + i]
+                for j in range(r2 - i + 1)
+            )
+            for i in range(r2 + 1)
+        ]
+        return toeplitz(
+            kappa_list + [0] * (T - r2 - 1)
+        )
+    
+    
+    def calculate_M_transform_A(
+        self,
+        z_re,
+        z_im,
+        method = 'eig',
+    ):
         """
         Calculate the M-transform M_A(z)
         at complex argument z = z_re + i * z_im
@@ -85,10 +114,10 @@ class Varma:
         """
         z = complex(z_re, z_im)
 
-        if method=='inv':
+        if method == 'inv':
             g = np.trace(inv(z * np.eye(self.T) - self.A)) / self.T
             return z * g - 1.
-        elif method=='eig':
+        elif method == 'eig':
             g = (1. / (z - self.A_eigval)).mean()
             return z * g - 1.
         else:
@@ -105,39 +134,22 @@ class Varma:
         convert them to sympy expressions, then further to lambda functions,
         with arguments u, chi, and the VARMA parameters.
         """
-        if self.chi_equations_path.is_dir():
-            params = ['chi'] + self.ab
-            args = symbols(' '.join(['u'] + params))
+        chi_equations_folder = self.name.lower().replace('(', '_').replace(', ', '_').replace(')', '')
+        data = files(chi_equations).joinpath(chi_equations_folder)
 
-            with open(self.chi_equations_path / 'pol.txt', 'r') as text_file:
-                pol_sympy = sympify(text_file.read())
-            self.pol = lambdify(args, pol_sympy)
-            
-            self.pol_grads = {}
-            for param in params:
-                with open(self.chi_equations_path / f'grad_{param}.txt', 'r') as text_file:
-                    pol_grad_sympy = sympify(text_file.read())
-                self.pol_grads[param] = lambdify(args, pol_grad_sympy)
+        params = ['chi'] + self.ab
+        args = symbols(' '.join(['u'] + params))
 
-        else:
-            raise Exception('Equation for this model is not provided in an appropriate text file.')
+        text = data.joinpath('pol.txt').read_text()
+        pol_sympy = sympify(text)
+        self.pol = lambdify(args, pol_sympy)
+        
+        self.pol_grads = {}
+        for param in params:
+            text = data.joinpath(f'grad_{param}.txt').read_text()
+            pol_grad_sympy = sympify(text)
+            self.pol_grads[param] = lambdify(args, pol_grad_sympy)
 
-
-    @staticmethod
-    def _calculate_A_vma(a_list, T):
-        """
-        Calculate the autocorrelation matrix A
-        of a VMA(r2) model.
-        """
-        r2 = len(a_list) - 1
-        kappa_list = [
-            sum(
-                a_list[j] * a_list[j + i]
-                for j in range(r2 - i + 1)
-            )
-            for i in range(r2 + 1)
-        ]
-        return toeplitz(kappa_list + [0] * (T - r2 - 1))
 
 # run this once (py -m varma)
 # in order to create a directory with text files
@@ -145,7 +157,12 @@ class Varma:
 # (unless they already exist)
 
 if __name__ == '__main__':
-    Path(CHI_EQUATIONS_DIR).mkdir(parents=True, exist_ok=True)
+    CHI_EQUATIONS_DIR = 'chi_equations'
+    
+    Path(CHI_EQUATIONS_DIR).mkdir(
+        parents = True,
+        exist_ok = True,
+    )
 
     a0, a1, a2, b1, b2, k0, k1, k2, A, B, C, N, chi, u = symbols('a0 a1 a2 b1 b2 k0 k1 k2 A B C N chi u')
 
@@ -159,18 +176,21 @@ if __name__ == '__main__':
             print(f'Error! The function provided for {file_name} is not a polynomial.')
     
     def write_to_dir(pol_sympy, dir_name, params):
-        (Path(CHI_EQUATIONS_DIR) / dir_name).mkdir(parents=True, exist_ok=True)
+        (Path(CHI_EQUATIONS_DIR) / dir_name).mkdir(
+            parents = True,
+            exist_ok = True,
+        )
         
         write_to_file(
-            pol_sympy=pol_sympy,
-            dir_name=dir_name,
-            file_name='pol'
+            pol_sympy = pol_sympy,
+            dir_name = dir_name,
+            file_name = 'pol',
         )
         for param in params:
             write_to_file(
-                pol_sympy=collect(diff(pol_sympy, param), chi),
-                dir_name=dir_name,
-                file_name=f'grad_{param}'
+                pol_sympy = collect(diff(pol_sympy, param), chi),
+                dir_name = dir_name,
+                file_name = f'grad_{param}',
             )
 
     # VMA(1)
@@ -182,16 +202,16 @@ if __name__ == '__main__':
     )
 
     write_to_dir(
-        pol_sympy=vma_1,
-        dir_name='vma_1',
-        params=[a0, a1, chi]
+        pol_sympy = vma_1,
+        dir_name = 'vma_1',
+        params = [a0, a1, chi],
     )
 
     # VAR(1)
 
     var_1_subs = [
         (a0, 1 / a0),
-        (a1, - b1 / a0)
+        (a1, - b1 / a0),
     ]
 
     var_1 = collect(
@@ -203,9 +223,9 @@ if __name__ == '__main__':
     )
     
     write_to_dir(
-        pol_sympy=var_1,
-        dir_name='var_1',
-        params=[a0, b1, chi]
+        pol_sympy = var_1,
+        dir_name = 'var_1',
+        params = [a0, b1, chi],
     )
 
     # VARMA(1, 1)
@@ -220,9 +240,9 @@ if __name__ == '__main__':
     )
     
     write_to_dir(
-        pol_sympy=varma_1_1,
-        dir_name='varma_1_1',
-        params=[a0, a1, b1, chi]
+        pol_sympy = varma_1_1,
+        dir_name = 'varma_1_1',
+        params = [a0, a1, b1, chi],
     )
 
     # VMA(2)
@@ -237,7 +257,7 @@ if __name__ == '__main__':
         (C, -k0 + 6 * k2),
         (k0, a0 ** 2 + a1 ** 2 + a2 ** 2),
         (k1, a0 * a1 + a1 * a2),
-        (k2, a0 * a2)
+        (k2, a0 * a2),
     ]
 
     vma_2 = collect(
@@ -249,9 +269,9 @@ if __name__ == '__main__':
     )
 
     write_to_dir(
-        pol_sympy=vma_2,
-        dir_name='vma_2',
-        params=[a0, a1, a2, chi]
+        pol_sympy = vma_2,
+        dir_name = 'vma_2',
+        params = [a0, a1, a2, chi],
     )
 
     # VAR(2)
@@ -267,7 +287,8 @@ if __name__ == '__main__':
     )
     
     write_to_dir(
-        pol_sympy=var_2,
-        dir_name='var_2',
-        params=[a0, b1, b2, chi]
+        pol_sympy = var_2,
+        dir_name = 'var_2',
+        params = [a0, b1, b2, chi],
     )
+
