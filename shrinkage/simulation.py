@@ -125,7 +125,7 @@ class AutoCovariance:
         if self.A_model == 'unit':
             self.A = np.eye(self.T_total)
         
-        elif self.A_model == 'VARMA':
+        elif self.A_model in ['exp-decay', 'VARMA']:
             varma = Varma(
                 T = self.T_total,
                 **self.kwargs,
@@ -135,12 +135,6 @@ class AutoCovariance:
             self.r1 = varma.r1
             self.r2 = varma.r2
             self.A = varma.A
-
-        elif self.A_model == 'exp-decay':
-            self.tau = self.kwargs.get('tau')
-            self.A = toeplitz(
-                np.exp(- np.arange(self.T_total) / self.tau)
-            )
         
         elif self.A_model == 'EWMA':
             self.delta = self.kwargs.get('delta')
@@ -180,9 +174,13 @@ class DataMatrix:
             self.prepare_sandwich()
             self.simulate_Y_sandwich()
         
-        elif self.method == 'recurrence' and self.kwargs.get('A_model') == 'VARMA':
+        elif self.method == 'recurrence (warm start)' and self.kwargs.get('A_model') in ['exp-decay', 'VARMA']:
             self.prepare_sandwich()
-            self.simulate_Y_recurrence()
+            self.simulate_Y_recurrence_warm_start()
+        
+        elif self.method == 'recurrence (fixed start)' and self.kwargs.get('A_model') in ['exp-decay', 'VARMA']:
+            self.prepare_sandwich()
+            self.simulate_Y_recurrence_fixed_start()
 
         elif self.method == 'load':
             self.Y = self.kwargs.get('Y')
@@ -237,12 +235,13 @@ class DataMatrix:
         self.Y = self.population_covariance.sqrt_C @ X @ self.auto_covariance.sqrt_A
     
 
-    def simulate_Y_recurrence(self):
+    def simulate_Y_recurrence_warm_start(self):
         """
         Simulate synthetic data Y of shape N x T_total
         by a given recurrence relation.
         """
-        if self.A_model == 'VARMA':
+        if self.kwargs.get('A_model') in ['exp-decay', 'VARMA']:
+            self.dist = self.kwargs.get('dist', 'Gaussian')
             self.seed = self.kwargs.get('seed')
             self.warm_start = self.kwargs.get('warm_start', 1000)
 
@@ -266,12 +265,12 @@ class DataMatrix:
             else:
                 raise Exception('Unknown distribution.')
 
-            for t in range(self.r2, T_full):
+            for t in range(self.auto_covariance.r2, T_full):
                 Y[:, t] = (
                     self.auto_covariance.a_list[::-1] * eps[:, (t - self.auto_covariance.r2):(t + 1)]
                 ).sum(axis = 1)
             
-            for t in range(self.r1, T_full - self.r2):
+            for t in range(self.auto_covariance.r1, T_full - self.auto_covariance.r2):
                 Y[:, t] += (
                     self.auto_covariance.b_list[::-1] * Y[:, (t - self.auto_covariance.r1):t]
                 ).sum(axis = 1)
@@ -281,3 +280,48 @@ class DataMatrix:
         else:
             raise Exception('Unknown model to simulate Y by a recurrence relation.')
 
+
+    def simulate_Y_recurrence_fixed_start(self):
+        """
+        Simulate synthetic data Y of shape N x T_total
+        by a given recurrence relation,
+        starting from a fixed value at time zero.
+        """
+        if self.kwargs.get('A_model') in ['exp-decay', 'VARMA']:
+            self.dist = self.kwargs.get('dist', 'Gaussian')
+            self.seed = self.kwargs.get('seed')
+            self.Y0 = self.kwargs.get('Y0')
+            assert len(self.Y0) == self.N
+
+            Y = np.zeros(shape = (self.N, self.T_total))
+            Y[:, 0] = self.Y0
+
+            rng = np.random.default_rng(
+                seed = self.seed,
+            )
+            if self.dist == 'Gaussian':
+                eps = self.population_covariance.sqrt_C @ rng.standard_normal(
+                    size = (self.N, self.T_total),
+                )
+            elif self.dist == 'Student-t':
+                df = self.kwargs.get('df')
+                eps = self.population_covariance.sqrt_C @ rng.standard_t(
+                    df = df,
+                    size = (self.N, self.T_total),
+                )
+            else:
+                raise Exception('Unknown distribution.')
+
+            for t in range(1, self.T_total):
+                eps_restr = eps[:, max(t - self.auto_covariance.r2, 0):(t + 1)]
+                a_list_rev_restr = self.auto_covariance.a_list[::-1][:eps_restr.shape[1]]
+                
+                Y_restr = Y[:, max(t - self.auto_covariance.r1, 0):t]
+                b_list_rev_restr = self.auto_covariance.b_list[::-1][:Y_restr.shape[1]]
+                
+                Y[:, t] = (a_list_rev_restr * eps_restr).sum(axis = 1) + (b_list_rev_restr * Y_restr).sum(axis = 1)
+            
+            self.Y = Y
+        
+        else:
+            raise Exception('Unknown model to simulate Y by a recurrence relation.')
