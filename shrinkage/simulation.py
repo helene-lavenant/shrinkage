@@ -27,6 +27,8 @@ class PopulationCovariance:
         self.generate_C()
 
         self.sqrt_C = sqrtm(self.C).real
+        self.inv_C = inv(self.C)
+        self.sqrt_inv_C = sqrtm(self.inv_C).real
     
 
     def generate_C(self):
@@ -116,6 +118,8 @@ class AutoCovariance:
         self.generate_A()
 
         self.sqrt_A = sqrtm(self.A).real
+        self.inv_A = inv(self.A)
+        self.sqrt_inv_A = sqrtm(self.inv_A).real
     
 
     def generate_A(self):
