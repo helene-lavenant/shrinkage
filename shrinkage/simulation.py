@@ -2,6 +2,7 @@ import numpy as np
 
 from scipy.linalg import toeplitz, sqrtm, inv
 from scipy.stats import ortho_group
+from scipy.optimize import minimize
 
 from .varma import Varma
 
@@ -115,6 +116,8 @@ class AutoCovariance:
 
         self.kwargs = kwargs
 
+        self.tau = self.kwargs.get("tau", None)
+
         self.generate_A()
 
         self.sqrt_A = sqrtm(self.A).real
@@ -129,7 +132,7 @@ class AutoCovariance:
         if self.A_model == 'unit':
             self.A = np.eye(self.T_total)
         
-        elif self.A_model in ['exp-decay', 'VARMA']:
+        elif self.A_model in ['exp-decay', 'VARMA']: # retirer la partie 'exp-decay pour la traiter séparément
             varma = Varma(
                 T = self.T_total,
                 **self.kwargs,
@@ -139,6 +142,18 @@ class AutoCovariance:
             self.r1 = varma.r1
             self.r2 = varma.r2
             self.A = varma.A
+        
+        elif self.A_model == 'exp-decay':
+            tau = np.atleast_1d(self.kwargs.get("tau"))
+            self.A = toeplitz(np.exp(-np.arange(self.total)/tau))
+        
+        elif self.A_model == '2-exp-decay':
+            taus = np.atleast_1d(self.kwargs.get("tau"))
+            if len(taus) != 2:
+                raise ValueError("tau must be a list or array of two values for 2-exp-decay")
+            A1 = toeplitz(np.exp(-np.arange(self.T_total)/taus[0]))
+            A2 = toeplitz(np.exp(-np.arange(self.T_total)/taus[1]))
+            self.A = A1 + A2
         
         elif self.A_model == 'EWMA':
             self.delta = self.kwargs.get('delta')
@@ -156,7 +171,48 @@ class AutoCovariance:
         if self.rotate_A:
             O = ortho_group.rvs(dim = self.T_total)
             self.A = O @ self.A @ O.T
+    
+    def fit_tau(self, data):
+        # Estimate optimal tau (or tau1 and tau2) from the data
 
+        if self.A_model == '2_exp_decay':
+            empirical_cov = np.cov(data.T)
+            initial_guess = [0.7, 0.3]
+            result = minimize(self._loss_taus, initial_guess, args=(empirical_cov,), method='Nelder-Mead')
+            self.tau_fit = result.x[0]
+            self.A = self._2_exp_decay(self.tau_fit[0], self.tau_fit[1], empirical_cov.shape[0])
+
+        elif self.A_model == 'exp_decay':
+            empirical_cov = np.cov(data.T)
+            initial_guess = 0.5
+            result = minimize(self._loss_tau, initial_guess, args=(empirical_cov,), method='Nelder-Mead')
+            self.tau_fit = result.x[0]
+            self.A = self._exp_decay(self.tau_fit, empirical_cov.shape[0])
+
+    @staticmethod
+    def _exp_decay(tau, size):
+        return toeplitz(np.exp(-np.arange(size)/tau))
+
+    @staticmethod
+    def _2_exp_decay(tau1, tau2, size):
+        A1 = toeplitz(np.exp(-np.arange(size)/tau1))
+        A2 = toeplitz(np.exp(-np.arange(size)/tau2))
+        return A1 + A2
+    
+    @staticmethod
+    def _loss_tau(tau, empirical_cov):
+        if tau<= 0: 
+            return np.inf
+        A_model = AutoCovariance._exp_decay(tau, empirical_cov[0])
+        return np.linalg.norm(empirical_cov-A_model, ord='fro') #norme de frobenius
+    
+    @staticmethod
+    def _loss_taus(taus, empirical_cov):
+        tau1, tau2 = taus
+        if tau1 <= 0 or tau2<= 0: 
+            return np.inf
+        A_model = AutoCovariance._2_exp_decay(tau1, tau2, empirical_cov.shape[0])
+        return np.linalg.norm(empirical_cov-A_model, ord='fro')
 
 class DataMatrix:
     """
