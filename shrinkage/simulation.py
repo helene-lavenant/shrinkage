@@ -132,7 +132,7 @@ class AutoCovariance:
         if self.A_model == 'unit':
             self.A = np.eye(self.T_total)
         
-        elif self.A_model in ['exp-decay', 'VARMA']: # retirer la partie 'exp-decay pour la traiter séparément
+        elif self.A_model in ['exp-decay', 'VARMA']:
             varma = Varma(
                 T = self.T_total,
                 **self.kwargs,
@@ -143,16 +143,12 @@ class AutoCovariance:
             self.r2 = varma.r2
             self.A = varma.A
         
-        elif self.A_model == 'exp-decay':
-            tau = np.atleast_1d(self.kwargs.get("tau"))
-            self.A = toeplitz(np.exp(-np.arange(self.total)/tau))
-        
         elif self.A_model == '2-exp-decay':
-            taus = np.atleast_1d(self.kwargs.get("tau"))
+            taus = np.atleast_1d(self.kwargs.get('tau'))
             if len(taus) != 2:
                 raise ValueError("tau must be a list or array of two values for 2-exp-decay")
-            A1 = toeplitz(np.exp(-np.arange(self.T_total)/taus[0]))
-            A2 = toeplitz(np.exp(-np.arange(self.T_total)/taus[1]))
+            A1 = toeplitz(np.exp(-np.arange(self.T_total) / taus[0]))
+            A2 = toeplitz(np.exp(-np.arange(self.T_total) / taus[1]))
             self.A = A1 + A2
         
         elif self.A_model == 'EWMA':
@@ -204,7 +200,7 @@ class AutoCovariance:
         if tau<= 0: 
             return np.inf
         A_model = AutoCovariance._exp_decay(tau, empirical_cov[0])
-        return np.linalg.norm(empirical_cov-A_model, ord='fro') #norme de frobenius
+        return np.linalg.norm(empirical_cov-A_model, ord='fro') #Frobenius norm
     
     @staticmethod
     def _loss_taus(taus, empirical_cov):
