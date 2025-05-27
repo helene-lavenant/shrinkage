@@ -149,7 +149,10 @@ class AutoCovariance:
                 raise ValueError("tau must be a list or array of two values for 2-exp-decay")
             A1 = toeplitz(np.exp(-np.arange(self.T_total) / taus[0]))
             A2 = toeplitz(np.exp(-np.arange(self.T_total) / taus[1]))
-            self.A = A1 + A2
+
+            a_list = self.kwargs.get('a_list', [0.5, 0.5])  # default: equal weights
+
+            self.A = a_list[0]*A1 + a_list[1]*A2
         
         elif self.A_model == 'EWMA':
             self.delta = self.kwargs.get('delta')
