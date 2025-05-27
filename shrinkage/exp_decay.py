@@ -13,7 +13,7 @@ class TwoExpDecayShrinkage:
         self.tau2 = tau2
         self.alpha1 = alpha1
         self.alpha2 = alpha2
-
+        self.name = "Two Exp Decay Shrinkage"
 
         self.build_autocorr_matrix()
 
@@ -79,32 +79,3 @@ class TwoExpDecayShrinkage:
         """
         self.chi = np.array([self.chi_A(u) for u in self.u_range])
         self.xi = self.E_eigval * self.chi.real / self.beta
-
-
-class Auto2Exp:
-    """
-    Constructs a matrix A = exp(-|i-j|/tau1) + exp(-|i-j|/tau2)
-    and exposes its eigenvalues and a method for computing the empirical Chi-transform.
-    """
-    def __init__(self, T, tau, rotate_A=False):
-        self.T = T
-        self.tau = np.atleast_1d(tau)
-        assert len(self.tau) == 2, "tau must be a list or array of two values"
-        self.rotate_A = rotate_A
-        self._generate_A()
-
-    def _generate_A(self):
-        indices = np.arange(self.T)
-        A1 = toeplitz(np.exp(-indices / self.tau[0]))
-        A2 = toeplitz(np.exp(-indices / self.tau[1]))
-        A = A1 + A2
-        if self.rotate_A:
-            from scipy.stats import ortho_group
-            O = ortho_group.rvs(dim=self.T)
-            A = O @ A @ O.T
-        self.A = A
-        self.A_eigval, _ = eigh(self.A)
-
-    def chi_transform(self, u):
-        return (1 / self.T) * np.trace(inv(np.eye(self.T) + u * self.A))
-    
