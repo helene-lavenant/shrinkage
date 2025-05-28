@@ -50,7 +50,7 @@ class LedoitPecheShrinkage(SampleEigenvalues):
         corresponding to any sample eigenvalue lambda_i.
         Importantly, keep q variable at this stage.
         """
-        alpha = q * (self.E_eigval * self.E_eigval_kernel_Hilbert - 1.)
+        alpha = q * (np.pi*self.E_eigval * self.E_eigval_kernel_Hilbert - 1.) ###### il manquait le pi
         beta = np.pi * q * self.E_eigval * self.E_eigval_kernel_density
 
         u_range = np.array([complex(al, be) for al, be in zip(alpha, beta)])

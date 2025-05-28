@@ -1,5 +1,7 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.linalg import toeplitz, eigh, inv
+from scipy.stats import gaussian_kde
 
 class TwoExpDecayShrinkage:
     """
@@ -23,6 +25,13 @@ class TwoExpDecayShrinkage:
 
         # Prepare a grid of u = alpha + i * beta
         self.u_range = self.generate_u_range()
+
+        self.plot_colors = {
+            'xi_bars': 'xkcd:mauve',
+            'xi_line': 'xkcd:maroon',
+            'xi_hilbert': 'xkcd:rose',
+        }
+        self.bns = 100 
 
     def build_autocorr_matrix(self):
         """
@@ -79,3 +88,103 @@ class TwoExpDecayShrinkage:
         """
         self.chi = np.array([self.chi_A(u) for u in self.u_range])
         self.xi = self.E_eigval * self.chi.real / self.beta
+    
+    @staticmethod
+    def epanechnikov_estimates(x, bandwidth):
+        # Estimate density with Epanechnikov kernel using Gaussian KDE as proxy
+        kde = gaussian_kde(x, bw_method=bandwidth / np.std(x, ddof=1))
+        density = kde.evaluate(x)
+
+        # Hilbert transform via numerical Hilbert transform
+        from scipy.signal import hilbert
+        hilbert_transform = np.imag(hilbert(density))
+
+        return density, hilbert_transform
+    
+    def calculate_epanechnikov_estimates_xi(self):
+        self.xi_kernel_density, self.xi_kernel_Hilbert = self.epanechnikov_estimates(
+            x=self.xi,
+            bandwidth=self.bandwidth if hasattr(self, "bandwidth") else 0.1,
+        )
+    def hist(
+    self,
+    show_xi=False,
+    show_xi_density=False,
+    show_xi_Hilbert=False,
+    ylim=None,
+    xlim=None,
+    legend=True,
+    savefig=None,
+    **kwargs,):
+        """
+        Plot histogram and density of the shrunk eigenvalues xi_i.
+        """
+        if show_xi:
+            plt.hist(
+                self.xi,
+                bins=self.bns,
+                alpha=0.5,
+                color=self.plot_colors.get('xi_bars', 'black'),
+                density=True,
+                label=f'{self.name} shrunk eigval',
+            )
+
+        if show_xi_density and hasattr(self, "xi_kernel_density"):
+            plt.plot(
+                self.xi,
+                self.xi_kernel_density,
+                color=self.plot_colors.get('xi_line', 'black'),
+                label=f'{self.name} shrunk eigval density',
+            )
+
+        if show_xi_Hilbert and hasattr(self, "xi_kernel_Hilbert"):
+            plt.plot(
+                self.xi,
+                self.xi_kernel_Hilbert,
+                color=self.plot_colors.get('xi_hilbert', 'black'),
+                label=f'{self.name} shrunk eigval Hilbert',
+            )
+
+        plt.xlabel('eigenvalue')
+        plt.ylabel('probability density')
+
+        if legend:
+            plt.legend()
+        if ylim:
+            plt.ylim(ylim)
+        if xlim:
+            plt.xlim(xlim)
+        if savefig:
+            plt.savefig(savefig)
+
+    def plot(
+        self,
+        show_xi=False,
+        xlim=None,
+        ylim=None,
+        legend=True,
+        savefig=None,
+        **kwargs,
+        ):
+        """
+        Plot xi_i as a function of the original sorted eigenvalues.
+        """
+        if show_xi:
+            plt.plot(
+                self.E_eigval,
+                self.xi,
+                color=self.plot_colors.get('xi_line', 'black'),
+                label=f'{self.name} shrunk eigval',
+            )
+
+        plt.xlabel(r'$\lambda$')
+        plt.ylabel(r'$\xi$')
+
+        if legend:
+            plt.legend()
+        if ylim:
+            plt.ylim(ylim)
+        if xlim:
+            plt.xlim(xlim)
+        if savefig:
+            plt.savefig(savefig)
