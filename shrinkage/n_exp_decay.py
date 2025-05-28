@@ -1,5 +1,7 @@
 import numpy as np
 
+
+from .varma import Varma
 from .rie_lp import LedoitPecheShrinkage
 
 
