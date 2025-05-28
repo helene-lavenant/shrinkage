@@ -13,7 +13,10 @@ class TwoExpDecay(LedoitPecheShrinkage):
     """
     def __init__(
         self,
-        tau,
+        tau1,
+        tau2,
+        alpha1,
+        alpha2,
         **kwargs,
     ):
         super().__init__(
@@ -21,8 +24,10 @@ class TwoExpDecay(LedoitPecheShrinkage):
             **kwargs,
         )
 
-        self.tau1 = tau[0]
-        self.tau2 = tau[1]
+        self.tau1 = tau1
+        self.tau2 = tau2
+        self.alpha1 = alpha1
+        self.alpha2 = alpha2
 
         self.build_autocorr_matrix()
 
