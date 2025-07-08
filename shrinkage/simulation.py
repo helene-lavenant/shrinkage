@@ -129,7 +129,7 @@ class AutoCovariance:
         if self.A_model == 'unit':
             self.A = np.eye(self.T_total)
         
-        elif self.A_model in ['exp-decay', 'VARMA']:
+        elif self.A_model in ['VARMA']:
             varma = Varma(
                 T = self.T_total,
                 **self.kwargs,
@@ -139,6 +139,10 @@ class AutoCovariance:
             self.r1 = varma.r1
             self.r2 = varma.r2
             self.A = varma.A
+        
+        elif self.A_model == 'exp-decay':
+            self.tau = self.kwargs.get('tau')
+            self.A = toeplitz(np.exp(-np.arange(self.T_total) / self.tau))
         
         elif self.A_model == 'EWMA':
             self.delta = self.kwargs.get('delta')
